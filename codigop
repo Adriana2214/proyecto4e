@@ -1,0 +1,1004 @@
+
+
+public class ActividadInsercionContacto extends AppCompatActivity{
+
+    // Referencias UI
+    private EditText campoPrimerNombre;
+    private EditText campoPrimerApellido;
+    private EditText campoTelefono;
+    private EditText campoCorreo;
+
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.actividad_insercion_contacto);
+
+        agregarToolbar();
+
+        // Encontrar Referencias UI
+        campoPrimerNombre = (EditText) findViewById(R.id.campo_primer_nombre);
+        campoPrimerApellido = (EditText) findViewById(R.id.campo_primer_apellido);
+        campoTelefono = (EditText) findViewById(R.id.campo_telefono);
+        campoCorreo = (EditText) findViewById(R.id.campo_correo);
+
+    }
+
+    private void agregarToolbar() {
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_insercion_contacto, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
+        switch (id) {
+            case R.id.accion_confirmar:
+                insertar();
+                break;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+
+    private void insertar() {
+
+        // Extraer datos de UI
+        String primerNombre = campoPrimerNombre.getText().toString();
+        String primerApellido = campoPrimerApellido.getText().toString();
+        String telefono = campoTelefono.getText().toString();
+        String correo = campoCorreo.getText().toString();
+
+        // Validaciones y pruebas de cordura
+        if (!esNombreValido(primerNombre)) {
+            TextInputLayout mascaraCampoNombre = (TextInputLayout) findViewById(R.id.mascara_campo_nombre);
+            mascaraCampoNombre.setError("Este campo no puede quedar vacío");
+        } else {
+
+            ContentValues valores = new ContentValues();
+
+            
+            valores.put(Contactos.ID_CONTACTO, Contactos.generarIdContacto());            
+            valores.put(Contactos.PRIMER_NOMBRE, primerNombre);
+            valores.put(Contactos.PRIMER_APELLIDO, primerApellido);
+            valores.put(Contactos.TELEFONO, telefono);
+            valores.put(Contactos.CORREO, correo);
+            valores.put(Contactos.VERSION, UTiempo.obtenerTiempo());
+
+            // Iniciar inserción|actualización
+            new TareaAnadirContacto(getContentResolver(), valores).execute(uriContacto);
+
+            finish();
+        }
+    }
+
+    private boolean esNombreValido(String nombre) {
+        return !TextUtils.isEmpty(nombre);
+    }
+    
+    static class TareaAnadirContacto extends AsyncTask<Void, Void, Void> {
+        private final ContentResolver resolver;
+        private final ContentValues valores;
+
+        public TareaAnadirContacto(ContentResolver resolver, ContentValues valores) {
+            this.resolver = resolver;
+            this.valores = valores;
+        }
+
+        @Override
+        protected Void doInBackground(Void... args) {         
+            resolver.insert(Contactos.URI_CONTENIDO, valores);
+            return null;
+        }
+
+    }
+
+}
+private void poblarViews(Cursor data) {
+    if (!data.moveToNext()) {
+        return;
+    }
+
+    campoPrimerNombre.setText(UConsultas.obtenerString(data, Contactos.PRIMER_NOMBRE));
+    campoPrimerApellido.setText(UConsultas.obtenerString(data, Contactos.PRIMER_APELLIDO));
+    campoTelefono.setText(UConsultas.obtenerString(data, Contactos.TELEFONO));
+    campoCorreo.setText(UConsultas.obtenerString(data, Contactos.CORREO));
+}
+
+@Override
+public Loader<Cursor> onCreateLoader(int id, Bundle args) {
+    return new CursorLoader(this, uriContacto, null, null, null, null);
+}
+
+@Override
+public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+    poblarViews(data);
+}
+
+@Override
+public void onLoaderReset(Loader<Cursor> loader) {
+static class TareaAnadirContacto extends AsyncTask<Uri, Void, Void> {
+    private final ContentResolver resolver;
+    private final ContentValues valores;
+
+    public TareaAnadirContacto(ContentResolver resolver, ContentValues valores) {
+        this.resolver = resolver;
+        this.valores = valores;
+    }
+
+    @Override
+    protected Void doInBackground(Uri... args) {
+        Uri uri = args[0];
+        if (null != uri) {
+            /*
+            Verificación: Si el contacto que se va a actualizar aún no ha sido sincronizado,
+            es decir su columna 'insertado' = 1, entonces la columna 'modificado' no debe ser
+            alterada
+             */
+            Cursor c = resolver.query(uri, new String[]{Contactos.INSERTADO}, null, null, null);
+
+            if (c != null && c.moveToNext()) {
+
+                // Verificación de sincronización
+                if (UConsultas.obtenerInt(c, Contactos.INSERTADO) == 0) {
+                    valores.put(Contactos.MODIFICADO, 1);
+                }
+
+                valores.put(Contactos.VERSION, UTiempo.obtenerTiempo());
+                resolver.update(uri, valores, null, null);
+            }
+
+        } else {
+            resolver.insert(Contactos.URI_CONTENIDO, valores);
+        }
+        return null;
+    }
+
+}
+@Override
+public boolean onOptionsItemSelected(MenuItem item) {
+    int id = item.getItemId();
+    switch (id) {
+        case R.id.accion_confirmar:
+            insertar();
+            break;
+        case R.id.accion_eliminar:
+            eliminar();
+            break;
+    }
+    return super.onOptionsItemSelected(item);
+}
+private void eliminar() {
+    if (uriContacto != null) {
+        new TareaEliminarContacto(getContentResolver()).execute(uriContacto);
+        finish();
+    }
+}
+static class TareaEliminarContacto extends AsyncTask<Uri, Void, Void> {
+    private final ContentResolver resolver;
+
+    public TareaEliminarContacto(ContentResolver resolver) {
+        this.resolver = resolver;
+    }
+
+    @Override
+    protected Void doInBackground(Uri... args) {
+
+        /*
+        Verificación: Si el registro no ha sido sincronizado aún, entonces puede eliminarse
+        directamente. De lo contrario se marca como 'eliminado' = 1
+         */
+        Cursor c = resolver.query(args[0], new String[]{Contactos.INSERTADO}
+                , null, null, null);
+
+        int insertado;
+
+        if (c != null && c.moveToNext()) {
+            insertado = UConsultas.obtenerInt(c, Contactos.INSERTADO);
+        } else {
+            return null;
+        }
+
+        if (insertado == 1) {
+            resolver.delete(args[0], null, null);
+        } else if (insertado == 0) {
+            ContentValues valores = new ContentValues();
+            valores.put(Contactos.ELIMINADO, 1);
+            resolver.update(args[0], valores, null, null);
+        }
+
+        return null;
+    }
+}
+menu_lista_contactos.xml
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/accion_sync"
+        android:icon="@drawable/icono_sync"
+        android:title="@string/accion_sync"
+        app:showAsAction="ifRoom" />
+</menu>
+@Override
+public boolean onOptionsItemSelected(MenuItem item) {
+    int id = item.getItemId();
+    if (id == R.id.accion_sync) {
+        sincronizar();
+        return true;
+    }
+
+    return super.onOptionsItemSelected(item);
+}
+
+private void sincronizar() {
+
+    // Verificación para evitar iniciar más de una sync a la vez
+    Account cuentaActiva = UCuentas.obtenerCuentaActiva(this);
+    if (ContentResolver.isSyncActive(cuentaActiva, Contrato.AUTORIDAD)) {
+        Log.d(TAG, "Ignorando sincronización ya que existe una en proceso.");
+        return;
+    }
+
+    Log.d(TAG, "Solicitando sincronización manual");
+    Bundle bundle = new Bundle();
+    bundle.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
+    bundle.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
+    ContentResolver.requestSync(cuentaActiva, Contrato.AUTORIDAD, bundle);
+}
+Autenticador.java
+/*
+ * Autenticador auxiliar para la aplicación
+ */
+public class Autenticador extends AbstractAccountAuthenticator {
+
+    public Autenticador(Context context) {
+        super(context);
+    }
+
+    @Override
+    public Bundle editProperties(
+            AccountAuthenticatorResponse r, String s) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Bundle addAccount(
+            AccountAuthenticatorResponse r,
+            String s,
+            String s2,
+            String[] strings,
+            Bundle bundle) throws NetworkErrorException {
+        return null;
+    }
+
+    @Override
+    public Bundle confirmCredentials(
+            AccountAuthenticatorResponse r,
+            Account account,
+            Bundle bundle) throws NetworkErrorException {
+        return null;
+    }
+
+    @Override
+    public Bundle getAuthToken(
+            AccountAuthenticatorResponse r,
+            Account account,
+            String s,
+            Bundle bundle) throws NetworkErrorException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public String getAuthTokenLabel(String s) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Bundle updateCredentials(
+            AccountAuthenticatorResponse r,
+            Account account,
+            String s, Bundle bundle) throws NetworkErrorException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Bundle hasFeatures(
+            AccountAuthenticatorResponse r,
+            Account account, String[] strings) throws NetworkErrorException {
+        throw new UnsupportedOperationException();
+    }
+}
+ServicioAutenticacion.java
+public class ServicioAutenticacion extends Service {
+    // Instancia del autenticador
+    private Autenticador autenticador;
+
+    @Override
+    public void onCreate() {
+        // Nueva instancia del autenticador
+        autenticador = new Autenticador(this);
+    }
+
+    /*
+     * Ligando el servicio al framework de Android
+     */
+    @Override
+    public IBinder onBind(Intent intent) {
+        return autenticador.getIBinder();
+    }
+}
+SyncAdapter.java
+public class SyncAdapter extends AbstractThreadedSyncAdapter {
+
+    private static final String TAG = SyncAdapter.class.getSimpleName();
+
+    private ContentResolver resolver;
+
+    public SyncAdapter(Context context, boolean autoInitialize) {
+        super(context, autoInitialize);
+        resolver = context.getContentResolver();
+    }
+
+    /**
+     * Constructor para mantener compatibilidad en versiones inferiores a 3.0
+     */
+    public SyncAdapter(
+            Context context,
+            boolean autoInitialize,
+            boolean allowParallelSyncs) {
+        super(context, autoInitialize, allowParallelSyncs);
+        resolver = context.getContentResolver();
+    }
+
+    @Override
+    public void onPerformSync(Account account,
+                              Bundle extras,
+                              String authority,
+                              ContentProviderClient provider,
+                              final SyncResult syncResult) {
+
+        Log.i(TAG, "Comenzando a sincronizar:" + account);
+
+    }
+}
+ServicioSincronizacion.java
+public class ServicioSincronizacion extends Service {
+    // Instancia del sincronizar adapter
+    private static SyncAdapter syncAdapter = null;
+    // Objeto para prevenir errores entre hilos
+    private static final Object lock = new Object();
+
+    @Override
+    public void onCreate() {
+        synchronized (lock) {
+            if (syncAdapter == null) {
+                syncAdapter = new SyncAdapter(getApplicationContext(), true);
+            }
+        }
+    }
+
+    /**
+     * Retorna interfaz de comunicación para uso interno del framework
+     */
+    @Override
+    public IBinder onBind(Intent intent) {
+        return syncAdapter.getSyncAdapterBinder();
+    }
+}
+VolleySingleton.java
+public final class VolleySingleton {
+
+    // Atributos
+    private static VolleySingleton singleton;
+    private RequestQueue requestQueue;
+    private static Context context;
+
+
+    private VolleySingleton(Context context) {
+        VolleySingleton.context = context;
+        requestQueue = getRequestQueue();
+    }
+
+    /**
+     * Retorna la instancia unica del singleton
+     *
+     * @param context contexto donde se ejecutarán las peticiones
+     * @return Instancia
+     */
+    public static synchronized VolleySingleton getInstance(Context context) {
+        if (singleton == null) {
+            singleton = new VolleySingleton(context.getApplicationContext());
+        }
+        return singleton;
+    }
+
+    /**
+     * Obtiene la instancia de la cola de peticiones
+     *
+     * @return cola de peticiones
+     */
+    private RequestQueue getRequestQueue() {
+        if (requestQueue == null) {
+            requestQueue = Volley.newRequestQueue(context.getApplicationContext());
+        }
+        return requestQueue;
+    }
+
+    /**
+     * Añade la petición a la cola
+     *
+     * @param req petición
+     * @param <T> Resultado final de tipo T
+     */
+    public <T> void addToRequestQueue(Request<T> req) {
+        getRequestQueue().add(req);
+    }
+
+}
+@Override
+public void onPerformSync(Account account,
+                          Bundle extras,
+                          String authority,
+                          ContentProviderClient provider,
+                          final SyncResult syncResult) {
+
+    Log.i(TAG, "Comenzando a sincronizar:" + account);
+
+    // Sincronización local
+    syncLocal();
+
+}
+
+private void syncLocal() {
+    // Construcción de cabeceras
+    HashMap<String, String> cabeceras = new HashMap<>();
+    cabeceras.put("Authorization", UPreferencias.obtenerClaveApi(getContext()));
+
+    // Petición GET
+    new RESTService(getContext()).get(URL_SYNC_BATCH,
+            new Response.Listener<JSONObject>() {
+                @Override
+                public void onResponse(JSONObject response) {
+                    // Procesar GET
+                }
+            },
+            new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                    // Procesar Error
+                }
+            }, cabeceras);
+}
+Contacto.java
+public class Contacto {
+
+    public String idContacto;
+    public String primerNombre;
+    public String primerApellido;
+    public String telefono;
+    public String correo;
+    public String version;
+    public int modificado;
+
+    public Contacto(String idContacto, String primerNombre,
+                    String primerApellido, String telefono, String correo, String version, int modificado) {
+        this.idContacto = idContacto;
+        this.primerNombre = primerNombre;
+        this.primerApellido = primerApellido;
+        this.telefono = telefono;
+        this.correo = correo;
+        this.version = version;
+        this.modificado = modificado;
+    }
+
+    public void aplicarSanidad() {
+        idContacto = idContacto == null ? "" : idContacto;
+        primerNombre = primerNombre == null ? "" : primerNombre;
+        primerApellido = primerApellido == null ? "" : primerApellido;
+        telefono = telefono == null ? "" : telefono;
+        correo = correo == null ? "" : correo;
+        version = version == null ? UTiempo.obtenerTiempo() : version;
+        modificado = 0;
+    }
+
+    public int esMasReciente(Contacto match) {
+        SimpleDateFormat formato = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+        try {
+            Date fechaA = formato.parse(version);
+            Date fechaB = formato.parse(match.version);
+
+            return fechaA.compareTo(fechaB);
+
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public boolean compararCon(Contacto otro) {
+        return idContacto.equals(otro.idContacto) &&
+                primerNombre.equals(otro.primerNombre) &&
+                primerApellido.equals(otro.primerApellido) &&
+                telefono.equals(otro.telefono) &&
+                correo.equals(otro.correo);
+    }
+}
+ProcesadorLocal.java
+public class ProcesadorLocal {
+
+    private static final String TAG = ProcesadorLocal.class.getSimpleName();
+
+    private interface ConsultaContactos {
+
+        // Proyección para consulta de contactos
+        String[] PROYECCION = {
+                Contactos.ID_CONTACTO,
+                Contactos.PRIMER_NOMBRE,
+                Contactos.PRIMER_APELLIDO,
+                Contactos.TELEFONO,
+                Contactos.CORREO,
+                Contactos.VERSION,
+                Contactos.MODIFICADO
+        };
+
+        // Indices de columnas
+        int ID_CONTACTO = 0;
+        int PRIMER_NOMBRE = 1;
+        int PRIMER_APELLIDO = 2;
+        int TELEFONO = 3;
+        int CORREO = 4;
+        int VERSION = 5;
+        int MODIFICADO = 6;
+
+    }
+
+    // Mapa para filtrar solo los elementos a sincronizar
+    private HashMap<String, Contacto> contactosRemotos = new HashMap<>();
+
+    // Conversor JSON
+    private Gson gson = new Gson();
+
+    public ProcesadorLocal() {
+    }
+
+    public void procesar(JSONArray arrayJsonContactos) {
+        // Añadir elementos convertidos a los contactos remotos
+        for (Contacto contactoActual : gson
+                .fromJson(arrayJsonContactos.toString(), Contacto[].class)) {
+            contactoActual.aplicarSanidad();
+            contactosRemotos.put(contactoActual.idContacto, contactoActual);
+        }
+    }
+
+    public void procesarOperaciones(ArrayList<ContentProviderOperation> ops, ContentResolver resolver) {
+
+        // Consultar contactos locales
+        Cursor c = resolver.query(Contactos.URI_CONTENIDO,
+                ConsultaContactos.PROYECCION,
+                Contactos.INSERTADO + "=?",
+                new String[]{"0"}, null);
+
+        if (c != null) {
+
+            while (c.moveToNext()) {
+
+                // Convertir fila del cursor en objeto Contacto
+                Contacto filaActual = deCursorAContacto(c);
+
+                // Buscar si el contacto actual se encuentra en el mapa de mapacontactos
+                Contacto match = contactosRemotos.get(filaActual.idContacto);
+
+                if (match != null) {
+                    // Esta entrada existe, por lo que se remueve del mapeado
+                    contactosRemotos.remove(filaActual.idContacto);
+
+                    // Crear uri de este contacto
+                    Uri updateUri = Contactos.construirUriContacto(filaActual.idContacto);
+
+                    /*
+                    Aquí se aplica la resolución de conflictos de modificaciones de un mismo recurso
+                    tanto en el servidro como en la app. Quién tenga la versión más actual, será tomado
+                    como preponderante
+                     */
+                    if (!match.compararCon(filaActual)) {
+                        int flag = match.esMasReciente(filaActual);
+                        if (flag > 0) {
+                            Log.d(TAG, "Programar actualización  del contacto " + updateUri);
+
+                            // Verificación: ¿Existe conflicto de modificación?
+                            if (filaActual.modificado == 1) {
+                                match.modificado = 0;
+                            }
+                            ops.add(construirOperacionUpdate(match, updateUri));
+
+                        }
+
+                    }
+
+                } else {
+                    /*
+                    Se deduce que aquellos elementos que no coincidieron, ya no existen en el servidor,
+                    por lo que se eliminarán
+                     */
+                    Uri deleteUri = Contactos.construirUriContacto(filaActual.idContacto);
+                    Log.i(TAG, "Programar Eliminación del contacto " + deleteUri);
+                    ops.add(ContentProviderOperation.newDelete(deleteUri).build());
+                }
+            }
+            c.close();
+        }
+
+        // Insertar los items resultantes ya que se asume que no existen en el contacto
+        for (Contacto contacto : contactosRemotos.values()) {
+            Log.d(TAG, "Programar Inserción de un nuevo contacto con ID = " + contacto.idContacto);
+            ops.add(construirOperacionInsert(contacto));
+        }
+    }
+
+    private ContentProviderOperation construirOperacionInsert(Contacto contacto) {
+        return ContentProviderOperation.newInsert(Contactos.URI_CONTENIDO)
+                .withValue(Contactos.ID_CONTACTO, contacto.idContacto)
+                .withValue(Contactos.PRIMER_NOMBRE, contacto.primerNombre)
+                .withValue(Contactos.PRIMER_APELLIDO, contacto.primerApellido)
+                .withValue(Contactos.TELEFONO, contacto.telefono)
+                .withValue(Contactos.CORREO, contacto.correo)
+                .withValue(Contactos.VERSION, contacto.version)
+                .withValue(Contactos.INSERTADO, 0)
+                .build();
+    }
+
+    private ContentProviderOperation construirOperacionUpdate(Contacto match, Uri updateUri) {
+        return ContentProviderOperation.newUpdate(updateUri)
+                .withValue(Contactos.ID_CONTACTO, match.idContacto)
+                .withValue(Contactos.PRIMER_NOMBRE, match.primerNombre)
+                .withValue(Contactos.PRIMER_APELLIDO, match.primerApellido)
+                .withValue(Contactos.TELEFONO, match.telefono)
+                .withValue(Contactos.CORREO, match.correo)
+                .withValue(Contactos.VERSION, match.version)
+                .withValue(Contactos.MODIFICADO, match.modificado)
+                .build();
+    }
+
+    /**
+     * Convierte una fila de un Cursor en un nuevo Contacto
+     *
+     * @param c cursor
+     * @return objeto contacto
+     */
+    private Contacto deCursorAContacto(Cursor c) {
+        return new Contacto(
+                c.getString(ConsultaContactos.ID_CONTACTO),
+                c.getString(ConsultaContactos.PRIMER_NOMBRE),
+                c.getString(ConsultaContactos.PRIMER_APELLIDO),
+                c.getString(ConsultaContactos.TELEFONO),
+                c.getString(ConsultaContactos.CORREO),
+                c.getString(ConsultaContactos.VERSION),
+                c.getInt(ConsultaContactos.MODIFICADO)
+        );
+    }
+}
+ProcesadorRemoto.java
+public class ProcesadorRemoto {
+    private static final String TAG = ProcesadorRemoto.class.getSimpleName();
+
+    // Campos JSON
+    private static final String INSERCIONES = "inserciones";
+    private static final String MODIFICACIONES = "modificaciones";
+    private static final String ELIMINACIONES = "eliminaciones";
+
+    private Gson gson = new Gson();
+
+    private interface ConsultaContactos {
+
+        // Proyección para consulta de contactos
+        String[] PROYECCION = {
+                Contactos.ID_CONTACTO,
+                Contactos.PRIMER_NOMBRE,
+                Contactos.PRIMER_APELLIDO,
+                Contactos.TELEFONO,
+                Contactos.CORREO,
+                Contactos.VERSION
+        };
+    }
+
+
+    public String crearPayload(ContentResolver cr) {
+        HashMap<String, Object> payload = new HashMap<>();
+
+        List<Map<String, Object>> inserciones = obtenerInserciones(cr);
+        List<Map<String, Object>> modificaciones = obtenerModificaciones(cr);
+        List<String> eliminaciones = obtenerEliminaciones(cr);
+
+        // Verificación: ¿Hay cambios locales?
+        if (inserciones == null && modificaciones == null && eliminaciones == null) {
+            return null;
+        }
+
+        payload.put(INSERCIONES, inserciones);
+        payload.put(MODIFICACIONES, modificaciones);
+        payload.put(ELIMINACIONES, eliminaciones);
+
+        return gson.toJson(payload);
+    }
+
+    public List<Map<String, Object>> obtenerInserciones(ContentResolver cr) {
+        List<Map<String, Object>> ops = new ArrayList<>();
+
+        // Obtener contactos donde 'insertado' = 1
+        Cursor c = cr.query(Contactos.URI_CONTENIDO,
+                ConsultaContactos.PROYECCION,
+                Contactos.INSERTADO + "=?",
+                new String[]{"1"}, null);
+
+        // Comprobar si hay trabajo que realizar
+        if (c != null && c.getCount() > 0) {
+
+            Log.d(TAG, "Inserciones remotas: " + c.getCount());
+
+            // Procesar inserciones
+            while (c.moveToNext()) {
+                ops.add(mapearInsercion(c));
+            }
+
+            return ops;
+
+        } else {
+            return null;
+        }
+
+    }
+
+    public List<Map<String, Object>> obtenerModificaciones(ContentResolver cr) {
+
+        List<Map<String, Object>> ops = new ArrayList<>();
+
+        // Obtener contactos donde 'modificado' = 1
+        Cursor c = cr.query(Contactos.URI_CONTENIDO,
+                ConsultaContactos.PROYECCION,
+                Contactos.MODIFICADO + "=?",
+                new String[]{"1"}, null);
+
+        // Comprobar si hay trabajo que realizar
+        if (c != null && c.getCount() > 0) {
+
+            Log.d(TAG, "Existen " + c.getCount() + " modificaciones de contactos");
+
+            // Procesar operaciones
+            while (c.moveToNext()) {
+                ops.add(mapearActualizacion(c));
+            }
+
+            return ops;
+
+        } else {
+            return null;
+        }
+
+    }
+
+    public List<String> obtenerEliminaciones(ContentResolver cr) {
+
+        List<String> ops = new ArrayList<>();
+
+        // Obtener contactos donde 'eliminado' = 1
+        Cursor c = cr.query(Contactos.URI_CONTENIDO,
+                ConsultaContactos.PROYECCION,
+                Contactos.ELIMINADO + "=?",
+                new String[]{"1"}, null);
+
+        // Comprobar si hay trabajo que realizar
+        if (c != null && c.getCount() > 0) {
+
+            Log.d(TAG, "Existen " + c.getCount() + " eliminaciones de contactos");
+
+            // Procesar operaciones
+            while (c.moveToNext()) {
+                ops.add(UConsultas.obtenerString(c, Contactos.ID_CONTACTO));
+            }
+
+            return ops;
+
+        } else {
+            return null;
+        }
+
+    }
+
+
+    /**
+     * Desmarca los contactos locales que ya han sido sincronizados
+     *
+     * @param cr content resolver
+     */
+    public void desmarcarContactos(ContentResolver cr) {
+        // Establecer valores de la actualización
+        ContentValues valores = new ContentValues();
+        valores.put(Contactos.INSERTADO, 0);
+        valores.put(Contactos.MODIFICADO, 0);
+
+        String seleccion = Contactos.INSERTADO + " = ? OR " +
+                Contactos.MODIFICADO + "= ?";
+        String[] argumentos = {"1", "1"};
+
+        // Modificar banderas de insertados y modificados
+        cr.update(Contactos.URI_CONTENIDO, valores, seleccion, argumentos);
+
+        seleccion = Contactos.ELIMINADO + "=?";
+        // Eliminar definitivamente
+        cr.delete(Contactos.URI_CONTENIDO, seleccion, new String[]{"1"});
+
+    }
+
+    private Map<String, Object> mapearInsercion(Cursor c) {
+        // Nuevo mapa para reflejarlo en JSON
+        Map<String, Object> mapaContacto = new HashMap<String, Object>();
+
+        // Añadir valores de columnas como atributos
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.ID_CONTACTO, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.PRIMER_NOMBRE, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.PRIMER_APELLIDO, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.TELEFONO, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.CORREO, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.VERSION, c);
+
+        return mapaContacto;
+    }
+
+    private Map<String, Object> mapearActualizacion(Cursor c) {
+        // Nuevo mapa para reflejarlo en JSON
+        Map<String, Object> mapaContacto = new HashMap<String, Object>();
+
+        // Añadir valores de columnas como atributos
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.ID_CONTACTO, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.PRIMER_NOMBRE, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.PRIMER_APELLIDO, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.TELEFONO, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.CORREO, c);
+        UDatos.agregarStringAMapa(mapaContacto, Contactos.VERSION, c);
+
+        return mapaContacto;
+    }
+strings.xml
+<resources>
+    <!-- Nombre App -->
+    <string name="app_name">People App</string>
+
+    <!-- Titulos actividades -->
+    <string name="titulo_actividad_actividad_contactos">Contactos</string>
+    <string name="titulo_actividad_insertar_contacto">Añadir nuevo contacto</string>
+    <string name="titulo_actividad_editar_contacto">Editar contacto</string>
+
+    <!-- Formulario Actividad inserción -->
+    <string name="hint_campo_texto_nombre">Primer nombre</string>
+    <string name="hint_campo_texto_apellido">Primer apellido</string>
+    <string name="hint_campo_texto_telefono">Teléfono</string>
+    <string name="hint_campo_texto_correo">Correo</string>
+
+    <!-- Tooltips acciones toolbar -->
+    <string name="accion_sync">Sincronizar</string>
+    <string name="accion_eliminar">Eliminar</string>
+    <string name="accion_guardar">Guardar</string>
+    <string name="accion_descartar">Descartar</string>
+
+    <!-- Cuenta Sync Adapter -->
+    <string name="tipo_cuenta">com.herprogramacion.peopleapp.cuenta</string>
+
+    <!-- Autoridad del provider -->
+    <string name="autoridad_provider">com.herprogramacion.peopleapp</string>
+
+</resources>
+Contrato.java
+public class Contrato {
+
+    interface ColumnasSincronizacion {
+        String MODIFICADO = "modificado";
+        String ELIMINADO = "eliminado";
+        String INSERTADO = "insertado";
+    }
+
+    interface ColumnasContacto {
+        String ID_CONTACTO = "idContacto"; // Pk
+        String PRIMER_NOMBRE = "primerNombre";
+        String PRIMER_APELLIDO = "primerApellido";
+        String TELEFONO = "telefono";
+        String CORREO = "correo";
+        String VERSION = "version";
+    }
+
+
+    // Autoridad del Content Provider
+    public final static String AUTORIDAD = "com.herprogramacion.peopleapp";
+
+    // Uri base
+    public final static Uri URI_CONTENIDO_BASE = Uri.parse("content://" + AUTORIDAD);
+
+
+    /**
+     * Controlador de la tabla "contacto"
+     */
+    public static class Contactos
+            implements BaseColumns, ColumnasContacto, ColumnasSincronizacion {
+
+        public static final Uri URI_CONTENIDO =
+                URI_CONTENIDO_BASE.buildUpon().appendPath(RECURSO_CONTACTO).build();
+
+        public final static String MIME_RECURSO =
+                "vnd.android.cursor.item/vnd." + AUTORIDAD + "/" + RECURSO_CONTACTO;
+
+        public final static String MIME_COLECCION =
+                "vnd.android.cursor.dir/vnd." + AUTORIDAD + "/" + RECURSO_CONTACTO;
+
+
+        /**
+         * Construye una {@link Uri} para el {@link #ID_CONTACTO} solicitado.
+         */
+        public static Uri construirUriContacto(String idContacto) {
+            return URI_CONTENIDO.buildUpon().appendPath(idContacto).build();
+        }
+
+        public static String generarIdContacto() {
+            return "C-" + UUID.randomUUID();
+        }
+
+        public static String obtenerIdContacto(Uri uri) {
+            return uri.getLastPathSegment();
+        }
+    }
+
+    // Recursos
+    public final static String RECURSO_CONTACTO = "contactos";
+
+}
+HelperContactos.java
+public class HelperContactos extends SQLiteOpenHelper {
+
+    static final int VERSION = 1;
+
+    static final String NOMBRE_BD = "people_app.db";
+
+
+    interface Tablas {
+        String CONTACTO = "contacto";
+    }
+
+    public HelperContactos(Context context) {
+        super(context, NOMBRE_BD, null, VERSION);
+    }
+
+    @Override
+    public void onCreate(SQLiteDatabase db) {
+        db.execSQL(
+                "CREATE TABLE " + Tablas.CONTACTO + "("
+                        + Contactos._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                        + Contactos.ID_CONTACTO + " TEXT UNIQUE,"
+                        + Contactos.PRIMER_NOMBRE + " TEXT NOT NULL,"
+                        + Contactos.PRIMER_APELLIDO + " TEXT,"
+                        + Contactos.TELEFONO + " TEXT,"
+                        + Contactos.CORREO + " TEXT,"
+                        + Contactos.VERSION + " DATE DEFAULT CURRENT_TIMESTAMP,"
+                        + Contactos.INSERTADO + " INTEGER DEFAULT 1,"
+                        + Contactos.MODIFICADO + " INTEGER DEFAULT 0,"
+                        + Contactos.ELIMINADO + " INTEGER DEFAULT 0)");
+
+    }
+
+    @Override
+    public void onUpgrade(SQLiteDatabase db, int i, int i1) {
+        try {
+            db.execSQL("DROP TABLE IF EXISTS " + Tablas.CONTACTO);
+        } catch (SQLiteException e) {
+            // Manejo de excepciones
+        }
+        onCreate(db);
+    }
+}
